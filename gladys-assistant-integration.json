@@ -1,177 +1,248 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Eco-Devices",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Unofficial: GCE Eco-Devices on your network: teleinfo, water and gas pulse counters.",
+    "fr": "Non officiel : Eco-Devices de GCE en local : téléinfo, compteurs d'eau et de gaz."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-ecodevices:0.1.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-ecodevices/main/cover.png",
+  "categories": ["energy"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "GCE Eco-Devices",
+        "fr": "Eco-Devices de GCE"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Unofficial connector, not affiliated with GCE Electronics. It reads an Eco-Devices (not the RT2) through its local JSON API, without any cloud: for each teleinformation input with a meter in historic mode (Linky or electronic meter), its apparent power and its consumption index (the sum of its tariff indexes: base, off-peak/peak, EJP or Tempo) for the Gladys energy monitoring, and each tariff index as a plain sensor; for each pulse counter set below (water or gas), its index and its consumption of the day in m³. Read-only. Not the gladys-teleinfo integration (a LiXee USB key): use one of them per meter, never both. Never tested with a real Eco-Devices.",
+        "fr": "Connecteur non officiel, sans lien avec GCE Electronics. Il lit un Eco-Devices (pas le RT2) par son API JSON locale, sans cloud : pour chaque entrée de téléinformation reliée à un compteur en mode historique (Linky ou compteur électronique), sa puissance apparente et son index de consommation (la somme de ses index tarifaires : base, heures creuses/pleines, EJP ou Tempo) pour le suivi énergétique de Gladys, et chaque index tarifaire en simple capteur ; pour chaque compteur d'impulsions réglé ci-dessous (eau ou gaz), son index et sa consommation du jour en m³. Lecture seule. Ce n'est pas l'intégration gladys-teleinfo (une clé USB LiXee) : une seule des deux par compteur, jamais les deux. Jamais testé avec un vrai Eco-Devices."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/LM1LC3N7/gladys-ecodevices/blob/main/docs/fr.md",
+          "label": {
+            "en": "Guide (French)",
+            "fr": "Guide (français)"
+          }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-ecodevices/blob/main/docs/en.md",
+          "label": {
+            "en": "Guide (English)",
+            "fr": "Guide (anglais)"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
+      "key": "address",
+      "type": "string",
       "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "label": {
+        "en": "Eco-Devices address",
+        "fr": "Adresse de l'Eco-Devices"
+      },
+      "description": {
+        "en": "The IP address of the Eco-Devices on your network (shown by your router or by GCE ScanDevice), with a port only if it is not 80. Preferably give it a fixed address; if it changes, enter the new one: each input keeps its device and history.",
+        "fr": "L'adresse IP de l'Eco-Devices sur votre réseau (visible dans votre box ou avec GCE ScanDevice), avec un port seulement s'il n'est pas 80. Donnez-lui de préférence une adresse fixe ; si elle change, saisissez la nouvelle : chaque entrée garde son appareil et son historique."
+      },
+      "placeholder": {
+        "en": "e.g. 192.168.1.20",
+        "fr": "ex. 192.168.1.20"
+      }
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
-    },
-    {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "key": "username",
+      "type": "string",
       "required": false,
-      "default": "celsius",
+      "label": {
+        "en": "User name (optional)",
+        "fr": "Nom d'utilisateur (facultatif)"
+      },
+      "description": {
+        "en": "Only if the secure access of the Eco-Devices is on (System tab, Security block): its user name. Leave empty otherwise.",
+        "fr": "Seulement si l'accès sécurisé de l'Eco-Devices est activé (onglet Système, bloc Sécurité) : son nom d'utilisateur. Sinon, laissez vide."
+      }
+    },
+    {
+      "key": "password",
+      "type": "secret",
+      "required": false,
+      "label": {
+        "en": "Password (optional)",
+        "fr": "Mot de passe (facultatif)"
+      },
+      "description": {
+        "en": "The password of that login. Kept by Gladys in its database, never shown again, never logged, sent only to the Eco-Devices address above (HTTP Basic authentication in plain HTTP on your network: the Eco-Devices offers nothing else). If the Eco-Devices refuses it, reads stop until you change it or click \"Test the connection\".",
+        "fr": "Le mot de passe de ces identifiants. Gardé par Gladys dans sa base, jamais réaffiché, jamais écrit dans les journaux, envoyé seulement à l'adresse de l'Eco-Devices ci-dessus (authentification HTTP Basic en HTTP simple sur votre réseau : l'Eco-Devices ne propose rien d'autre). Si l'Eco-Devices le refuse, les lectures s'arrêtent jusqu'à ce que vous le changiez ou cliquiez sur « Tester la connexion »."
+      }
+    },
+    {
+      "key": "c1_type",
+      "type": "select",
+      "required": false,
+      "default": "none",
+      "label": {
+        "en": "Pulse counter 1",
+        "fr": "Compteur d'impulsions 1"
+      },
+      "description": {
+        "en": "What the meter wired on pulse input C1 of the Eco-Devices measures. \"Not used\" leaves it out. Choose before creating its device.",
+        "fr": "Ce que mesure le compteur branché sur l'entrée d'impulsions C1 de l'Eco-Devices. « Non utilisé » l'ignore. À choisir avant de créer son appareil."
+      },
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "none",
+          "label": {
+            "en": "Not used",
+            "fr": "Non utilisé"
+          }
+        },
+        {
+          "value": "water",
+          "label": {
+            "en": "Water",
+            "fr": "Eau"
+          }
+        },
+        {
+          "value": "gas",
+          "label": {
+            "en": "Gas",
+            "fr": "Gaz"
+          }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
-      "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
-      },
+      "key": "c1_unit",
+      "type": "select",
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": "liter",
+      "label": {
+        "en": "Unit of the index of counter 1",
+        "fr": "Unité de l'index du compteur 1"
+      },
+      "description": {
+        "en": "The unit of the index the Eco-Devices shows for counter 1 (litres by default, as most setups use: 1 pulse = 1 litre). Compare it with the index of the meter itself. Gladys shows m³.",
+        "fr": "L'unité de l'index que l'Eco-Devices affiche pour le compteur 1 (litres par défaut, le réglage le plus courant : 1 impulsion = 1 litre). Comparez-le avec l'index du compteur lui-même. Gladys affiche des m³."
+      },
+      "options": [
+        {
+          "value": "liter",
+          "label": {
+            "en": "Litres",
+            "fr": "Litres"
+          }
+        },
+        {
+          "value": "cubic_meter",
+          "label": {
+            "en": "Cubic metres",
+            "fr": "Mètres cubes"
+          }
+        }
+      ]
+    },
+    {
+      "key": "c2_type",
+      "type": "select",
+      "required": false,
+      "default": "none",
+      "label": {
+        "en": "Pulse counter 2",
+        "fr": "Compteur d'impulsions 2"
+      },
+      "description": {
+        "en": "What the meter wired on pulse input C2 of the Eco-Devices measures. \"Not used\" leaves it out. Choose before creating its device.",
+        "fr": "Ce que mesure le compteur branché sur l'entrée d'impulsions C2 de l'Eco-Devices. « Non utilisé » l'ignore. À choisir avant de créer son appareil."
+      },
+      "options": [
+        {
+          "value": "none",
+          "label": {
+            "en": "Not used",
+            "fr": "Non utilisé"
+          }
+        },
+        {
+          "value": "water",
+          "label": {
+            "en": "Water",
+            "fr": "Eau"
+          }
+        },
+        {
+          "value": "gas",
+          "label": {
+            "en": "Gas",
+            "fr": "Gaz"
+          }
+        }
+      ]
+    },
+    {
+      "key": "c2_unit",
+      "type": "select",
+      "required": false,
+      "default": "liter",
+      "label": {
+        "en": "Unit of the index of counter 2",
+        "fr": "Unité de l'index du compteur 2"
+      },
+      "description": {
+        "en": "The unit of the index the Eco-Devices shows for counter 2 (litres by default, as most setups use: 1 pulse = 1 litre). Compare it with the index of the meter itself. Gladys shows m³.",
+        "fr": "L'unité de l'index que l'Eco-Devices affiche pour le compteur 2 (litres par défaut, le réglage le plus courant : 1 impulsion = 1 litre). Comparez-le avec l'index du compteur lui-même. Gladys affiche des m³."
+      },
+      "options": [
+        {
+          "value": "liter",
+          "label": {
+            "en": "Litres",
+            "fr": "Litres"
+          }
+        },
+        {
+          "value": "cubic_meter",
+          "label": {
+            "en": "Cubic metres",
+            "fr": "Mètres cubes"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
+      "key": "test_connection",
+      "timeout_seconds": 30,
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion"
+      },
+      "description": {
+        "en": "Reads the Eco-Devices once when a read is due (never more than one every 15 seconds), otherwise tells the last read: each input with its power and index. After a refused login, it tries once more.",
+        "fr": "Lit l'Eco-Devices une fois quand une lecture est due (jamais plus d'une toutes les 15 secondes), sinon donne la dernière lecture : chaque entrée avec sa puissance et son index. Après des identifiants refusés, il réessaie une fois."
+      }
     },
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
-    }
-  ],
-  "scene_triggers": [
-    {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
-      "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+      "key": "accept_held_index",
+      "timeout_seconds": 30,
+      "label": {
+        "en": "Accept the held index",
+        "fr": "Accepter l'index retenu"
       },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
-        }
-      ],
-      "variables": [
-        {
-          "key": "target",
-          "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
-        }
-      ]
-    }
-  ],
-  "scene_actions": [
-    {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
       "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
-      },
-      "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ],
-      "outputs": [
-        {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
-        }
-      ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+        "en": "Only when the status shows an index jump held back and it is right. Two clicks: the first lists the held jumps and takes nothing; the second, a few seconds to 5 minutes later, takes the values listed, plus what the meter may measure between the clicks, for each input whose held value has not changed otherwise. A jump is then counted at once. A drop is never accepted (delete and create the device again). Saving the configuration never accepts.",
+        "fr": "Seulement quand l'état affiche un saut d'index retenu et qu'il est juste. Deux clics : le premier liste les sauts retenus et ne prend rien ; le second, de quelques secondes à 5 minutes plus tard, prend les valeurs listées, plus ce que le compteur a pu mesurer entre les clics, pour chaque entrée dont la valeur retenue n'a pas changé autrement. Un saut est alors compté d'un coup. Une baisse n'est jamais acceptée (supprimez puis recréez l'appareil). Enregistrer la configuration n'accepte jamais."
+      }
     }
   ]
 }
