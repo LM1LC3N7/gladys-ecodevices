@@ -24,7 +24,10 @@ export function parseAddress(raw) {
   text = text.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/[/?#].*$/, '');
   // user:password@ never belongs in the address: refused rather than sent
   // around; a control byte (CR, LF...) never goes into a request.
-  if (text.includes('@') || /[\s\p{Cc}]/u.test(text)) {
+  if (text.includes('@')) {
+    return { error: 'credentials' };
+  }
+  if (/[\s\p{Cc}]/u.test(text)) {
     return { error: 'invalid' };
   }
   const bracketed = /^\[([0-9a-f:.]+)\](?::(\d{1,5}))?$/i.exec(text);
@@ -103,6 +106,8 @@ export function normalizeConfig(raw = {}) {
     invalidAddress:
       Boolean(parsed.error) ||
       (typeof raw?.address === 'string' && value === '' && raw.address !== ''),
+    /** user:password@ pasted in the address (the wiki writes the URL so): the login fields instead. */
+    credentialsInAddress: parsed.error === 'credentials',
     login: login === 'invalid' ? null : login,
     invalidLogin: login === 'invalid',
     counters: Object.fromEntries(COUNTER_INPUTS.map((input) => [input, counterOf(raw, input)])),

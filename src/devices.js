@@ -101,7 +101,7 @@ const TARIFF_NAMES = {
   BBRHPJR: 'Index Tempo red peak (kWh)',
 };
 
-const MAX_KWH = TARIFF_MAX * TARIFFS.length;
+const MAX_KWH = (TARIFF_MAX * TARIFFS.length) / 1000;
 
 /** The definition of each feature key, by kind of input. */
 const TELEINFO_DEFINITIONS = {
@@ -189,7 +189,7 @@ export function capabilitiesOfTeleinfo(reading) {
     return keys;
   }
   if (isNumber(reading.papp)) keys.add(FEATURE.POWER);
-  if (reading.tariffs) {
+  if (reading.tariffs && (reading.missing ?? []).length === 0) {
     keys.add(FEATURE.CONSUMPTION_INDEX);
     for (const name of Object.keys(reading.tariffs)) {
       keys.add(FEATURE.tariff(name));

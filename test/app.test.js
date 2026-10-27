@@ -132,14 +132,20 @@ test('a drop is held, never accepted: the last value is sent again, the status s
   await wait(MINUTE);
   assert.equal(last(gladys, F('t1', 'consumption_index')), 50_670.371);
   assert.ok(!gladys.fake.states.some((s) => s.state === 1));
+  assert.match(text(gladys), /Consumption index DROP held, never accepted/);
   assert.match(text(gladys), /teleinfo 1 dropped from 50670.371 to 1 kWh/);
-  assert.match(text(gladys), /never accepted/);
+  assert.match(text(gladys), /change of tariff option/);
+  assert.match(text(gladys), /more than 5000 states/);
+  assert.match(JSON.stringify(status(gladys).message.fr), /BAISSE d’index de consommation retenue/);
   assert.equal(store.data.indexes.t1.held.direction, 'down');
+  const badge = gladys.fake.transports.at(-1);
+  assert.equal(badge.degraded, true);
+  assert.match(badge.message.en, /never accepted/);
   const first = await app.acceptHeldIndex();
-  assert.match(first.en, /Only drops are held/);
+  assert.match(first.en, /Only teleinfo drops are held/);
   await wait(5 * SECOND);
   const second = await app.acceptHeldIndex();
-  assert.match(second.en, /Only drops are held/);
+  assert.match(second.en, /Only teleinfo drops are held/);
   await wait(MINUTE);
   assert.equal(last(gladys, F('t1', 'consumption_index')), 50_670.371, 'never taken');
 });
@@ -153,7 +159,7 @@ test('a jump is held; two clicks take it, bounded to what the first listed', asy
   assert.equal(last(gladys, F('t1', 'consumption_index')), 50_670.371);
   assert.match(text(gladys), /jumped from 50670.371 to 60670.371 kWh/);
   const first = await app.acceptHeldIndex();
-  assert.match(first.en, /A second click accepts these jumps/);
+  assert.match(first.en, /A second click accepts these values/);
   await wait(1 * SECOND);
   const tooSoon = await app.acceptHeldIndex();
   assert.match(tooSoon.en, /A second click/, 'a double click lists again, takes nothing');
@@ -548,16 +554,180 @@ test('the test button: tells the last read with the index sent or held', async (
   assert.match(answer.en, /Next read in/);
 });
 
-test('a counter drop (set back on the Eco-Devices) is held, never accepted', async () => {
+test('a counter drop (index corrected on the Eco-Devices) is taken in two clicks, bounded', async () => {
+  const { box, dev } = scripted();
+  const devices = [created('c1', { kind: 'water' })];
+  const { app, gladys, start, wait, lines } = await setup({ dev, devices, config: WATER_GAS });
+  await start(WATER_GAS);
+  box.body = indexes({ c1: 60_000 });
+  await wait(MINUTE);
+  assert.equal(last(gladys, F('c1', 'index')), 70.371);
+  assert.match(text(gladys), /counter 1 dropped from 70.371 to 60 m³/);
+  assert.doesNotMatch(text(gladys), /would be counted/);
+  await wait(10 * MINUTE);
+  assert.equal(lines.filter((l) => /c1 index drop held back/.test(l)).length, 1, 'one log line');
+  assert.match((await app.acceptHeldIndex()).en, /A second click accepts these values/);
+  await wait(5 * SECOND);
+  assert.match((await app.acceptHeldIndex()).en, /Accepted: counter 1, index 60 m³/);
+  await wait(MINUTE);
+  assert.equal(last(gladys, F('c1', 'index')), 60);
+});
+
+test('a counter drop that moves on beyond the margin after the first click is not taken', async () => {
   const { box, dev } = scripted();
   const devices = [created('c1', { kind: 'water' })];
   const { app, gladys, start, wait } = await setup({ dev, devices, config: WATER_GAS });
   await start(WATER_GAS);
-  box.body = indexes({ c1: 10 });
+  box.body = indexes({ c1: 60_000 });
+  await wait(MINUTE);
+  await app.acceptHeldIndex();
+  box.body = indexes({ c1: 30_000 });
+  await wait(MINUTE);
+  assert.doesNotMatch((await app.acceptHeldIndex()).en, /Accepted/);
   await wait(MINUTE);
   assert.equal(last(gladys, F('c1', 'index')), 70.371);
-  assert.match(text(gladys), /counter 1 dropped from 70.371 to 0.01 m³/);
-  assert.match((await app.acceptHeldIndex()).en, /Only drops/);
+});
+
+test('the unit of a counter corrected (m³ to litres, and back): the reference follows', async () => {
+  const { box, dev } = scripted();
+  box.body = indexes({ c1: 123_456 });
+  const devices = [created('c1', { kind: 'water' })];
+  const m3 = { ...WATER_GAS, c1_unit: 'cubic_meter' };
+  const { gladys, start, wait, app } = await setup({ dev, devices, config: m3 });
+  await start(m3);
+  assert.equal(last(gladys, F('c1', 'index')), 123_456);
+  await app.configUpdated(WATER_GAS);
+  await wait(MINUTE);
+  assert.equal(last(gladys, F('c1', 'index')), 123.456, 'no drop held');
+  assert.doesNotMatch(text(gladys), /held/);
+  box.body = indexes({ c1: 123_500 });
+  await wait(MINUTE);
+  assert.equal(last(gladys, F('c1', 'index')), 123.5);
+  // Back to m³ (the same raw index read in m³ again): no jump held either.
+  await app.configUpdated(m3);
+  await wait(MINUTE);
+  assert.equal(last(gladys, F('c1', 'index')), 123_500);
+  assert.doesNotMatch(text(gladys), /held/);
+});
+
+test('the guard limits follow the kind of counter: water 10 m³/h, gas 16 m³/h', async () => {
+  const { box, dev } = scripted(indexes({ c1: 1_000_000, c2: 1_000_000 }));
+  const devices = [created('c1', { kind: 'water' }), created('c2', { kind: 'gas' })];
+  const { gladys, start, wait } = await setup({ dev, devices, config: WATER_GAS });
+  await start(WATER_GAS);
+  // 0.3 m³ in a minute: 18 m³/h, too much for water (10), too much for gas (16)?
+  // Gas: 16/60 + 0.05 = 0.317 m³; water: 10/60 + 0.05 = 0.217 m³; electricity limits would take 2.17.
+  box.body = indexes({ c1: 1_000_300, c2: 1_000_300 });
+  await wait(MINUTE);
+  assert.equal(last(gladys, F('c1', 'index')), 1000, 'water: held');
+  assert.equal(last(gladys, F('c2', 'index')), 1000.3, 'gas: taken');
+});
+
+test('the second click refuses a jump whose threshold changed, even back near the listed value', async () => {
+  const { box, dev } = scripted();
+  const { app, gladys, start, wait } = await setup({ dev, devices: [created('t1')] });
+  await start();
+  box.body = indexes({ base: 60_670_371 });
+  await wait(MINUTE);
+  await app.acceptHeldIndex();
+  box.body = indexes({ base: 55_670_371 });
+  await wait(MINUTE);
+  box.body = indexes({ base: 60_670_400 });
+  await wait(MINUTE);
+  const done = await app.acceptHeldIndex();
+  assert.doesNotMatch(done.en, /Accepted/);
+  await wait(MINUTE);
+  assert.equal(last(gladys, F('t1', 'consumption_index')), 50_670.371);
+});
+
+test('a device created again while the integration was away starts from an empty reference', async () => {
+  const store = createMemoryStore();
+  const { box, dev } = scripted();
+  const a = await setup({ store, dev, devices: [created('t1')] });
+  await a.start();
+  box.body = indexes({ base: 1_000 });
+  await a.wait(MINUTE);
+  assert.equal(store.data.indexes.t1.device, 'device-t1-1');
+  // (C) deleted and created again during a disconnection: no event reached the app.
+  await a.app.disconnected();
+  await a.gladys.disconnect();
+  a.gladys.fake.devices = [created('t1', { id: 'device-t1-2' })];
+  // The SDK reads the devices again at the reconnection (no device-created event).
+  await a.gladys.connect();
+  await a.app.connected(async () => CONFIG);
+  await a.wait(MINUTE);
+  assert.equal(last(a.gladys, F('t1', 'consumption_index')), 1);
+  assert.doesNotMatch(text(a.gladys), /DROP/);
+  await a.app.stop();
+  // (D) the same across a restart of the container.
+  box.body = indexes({ base: 50_670_371 });
+  const store2 = createMemoryStore();
+  const b1 = await setup({ store: store2, dev, devices: [created('t1')] });
+  await b1.start();
+  box.body = indexes({ base: 1_000 });
+  await b1.wait(MINUTE);
+  await b1.app.stop();
+  const b2 = await setup({
+    store: store2,
+    dev,
+    now: b1.clock.now + HOUR,
+    devices: [created('t1', { id: 'device-t1-9' })],
+  });
+  await b2.start();
+  assert.equal(last(b2.gladys, F('t1', 'consumption_index')), 1);
+});
+
+test('a device deleted: the index state of its input goes with it', async () => {
+  const { box, dev } = scripted();
+  const { app, gladys, start, wait, store } = await setup({ dev, devices: [created('t1')] });
+  await start();
+  box.body = indexes({ base: 1_000 });
+  await wait(MINUTE);
+  gladys.fake.devices = [];
+  await app.onDeviceDeleted({ external_id: D('t1') });
+  assert.equal(store.data.indexes.t1, undefined);
+  assert.doesNotMatch(text(gladys), /DROP/);
+});
+
+test('a key of the option missing from the answer: its own note with the key names, no index', async () => {
+  const { dev } = scripted(hchp());
+  dev.world = (path) =>
+    path.endsWith('cmd=10') ? indexes({ t1: { BASE: null, HCHC: 20_000_000 } }) : daily();
+  const { gladys, start, lines } = await setup({ dev });
+  await start();
+  assert.match(text(gladys), /teleinfo 1: the answer gives no HCHP/);
+  assert.doesNotMatch(text(gladys), /this time/);
+  assert.ok(lines.some((l) => /gives no HCHP/.test(l)));
+  const [device] = gladys.fake.discoveredDevices;
+  assert.ok(!device.features.some((f) => f.external_id === F('t1', 'consumption_index')));
+});
+
+test('"----" with an index still there: the power is unknown, never 0 VA', async () => {
+  const { dev } = scripted(indexes({ papp: 0, t1: { PTEC: '----' } }));
+  const { gladys, start } = await setup({ dev, devices: [created('t1')] });
+  await start();
+  assert.equal(statesOf(gladys, F('t1', 'power')).length, 0);
+  assert.equal(last(gladys, F('t1', 'consumption_index')), 50_670.371);
+});
+
+test('a slow page of the day never delays the indexes', async () => {
+  let release;
+  const { box, dev } = scripted();
+  box.dailyBody = () =>
+    new Promise((resolve) => {
+      release = () => resolve(daily());
+    });
+  const devices = [created('t1'), created('c1', { kind: 'water' })];
+  const { app, gladys, advance } = await setup({ dev, devices, config: WATER_GAS });
+  await app.start(WATER_GAS);
+  const running = advance(0);
+  while (!release) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(last(gladys, F('t1', 'consumption_index')), 50_670.371);
+  assert.equal(last(gladys, F('c1', 'index')), 70.371);
+  release();
+  await running;
+  await app.idle();
+  assert.equal(last(gladys, F('c1', 'today')), 0.135);
 });
 
 test('a water jump beyond 10 m³/h is held', async () => {

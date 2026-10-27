@@ -20,6 +20,8 @@ gladys.onScanRequest(() => app.scan());
 // A device just created: its values come at the next read.
 gladys.onDeviceCreated((device) => app.onDeviceCreated(device));
 gladys.onDeviceUpdated((device) => app.onDeviceUpdated(device));
+// A device deleted: the index state of its input goes with it.
+gladys.onDeviceDeleted((device) => app.onDeviceDeleted(device));
 
 // --- Configuration screen buttons -----------------------------------------------
 gladys.onAction(ACTIONS.TEST, () => app.testConnection());

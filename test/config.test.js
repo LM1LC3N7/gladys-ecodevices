@@ -8,14 +8,9 @@ test('addresses: IP, host, port, pasted URL; refused forms', () => {
   assert.deepEqual(parseAddress('ecodevices.lan:8080'), { address: 'ecodevices.lan:8080' });
   assert.deepEqual(parseAddress('fe80::1'), { address: '[fe80::1]' });
   assert.deepEqual(parseAddress(''), { address: '' });
-  for (const bad of [
-    'admin:pw@192.168.1.20',
-    'a b',
-    'host:0',
-    'host:70000',
-    'bad_host',
-    'x\r\ny',
-  ]) {
+  assert.deepEqual(parseAddress('http://admin:pw@192.168.1.20/'), { error: 'credentials' });
+  assert.equal(normalizeConfig({ address: 'admin:pw@1.2.3.4' }).credentialsInAddress, true);
+  for (const bad of ['a b', 'host:0', 'host:70000', 'bad_host', 'x\r\ny']) {
     assert.deepEqual(parseAddress(bad), { error: 'invalid' }, bad);
   }
 });

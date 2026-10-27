@@ -83,15 +83,32 @@ d'être facturé :
 - un saut ou une baisse est **retenu** : la dernière valeur acceptée est
   renvoyée, l'état de l'intégration l'affiche, et il est gardé dans `/data`
   au redémarrage. Ni le temps ni la répétition ne le confirment ;
-- **un saut** juste se prend en **deux clics** sur « Accepter l'index
-  retenu » : le premier clic liste les sauts et ne prend rien ; le second,
-  de quelques secondes à 5 minutes plus tard, prend les valeurs listées (plus
-  ce que le compteur a pu mesurer entre-temps), seulement si elles n'ont pas
-  changé autrement. Enregistrer la configuration n'accepte rien ;
-- **une baisse n'est jamais acceptée** : si le compteur a été remplacé, ou si
-  vous avez remis le compteur d'impulsions à une valeur plus basse dans
-  l'Eco-Devices, supprimez l'appareil de cette entrée puis recréez-le depuis
-  l'onglet Découverte (son historique repart de zéro) ;
+- **un saut** juste (et, pour un compteur d'eau ou de gaz, **une baisse**
+  juste, par exemple après avoir corrigé l'index saisi dans l'Eco-Devices) se
+  prend en **deux clics** sur « Accepter l'index retenu » : le premier clic
+  liste les valeurs retenues et ne prend rien ; le second, de quelques
+  secondes à 5 minutes plus tard, prend les valeurs listées (plus ce que le
+  compteur a pu mesurer entre-temps), seulement si elles n'ont pas changé
+  autrement. Enregistrer la configuration n'accepte rien. Le badge de
+  l'appareil passe à l'orange tant qu'un index est retenu ;
+- changer l'**unité** d'un compteur d'impulsions dans la configuration
+  (litres ou m³) convertit la valeur de référence : ni saut ni baisse ;
+- **une baisse de l'index de consommation téléinfo n'est jamais acceptée**
+  (c'est une somme d'index : elle ne baisse que si c'est un autre compteur).
+  Elle arrive quand le compteur est **remplacé**, ou quand l'**option
+  tarifaire change** (base vers heures creuses ou Tempo, par exemple) et que
+  le compteur repart de zéro sur les nouveaux index. L'état de l'intégration
+  le dit (« BAISSE d'index de consommation retenue, jamais acceptée »). La
+  seule sortie est de **supprimer l'appareil** de cette entrée puis de le
+  **recréer** depuis l'onglet Découverte. Ce que cela coûte :
+  - tout l'historique de l'appareil est perdu : index, puissance, et la
+    **consommation et le coût** calculés par le suivi énergétique ;
+  - il faut le replacer dans l'arbre énergie et le rattacher à votre contrat ;
+  - Gladys refuse de supprimer un appareil de plus de 5000 états (environ
+    21 heures de puissance à une valeur toutes les 15 secondes) : il les purge
+    en arrière-plan, réessayez plus tard.
+    Garder l'historique sans accepter la baisse (un nouvel appareil créé à côté
+    de l'ancien) n'est pas possible dans cette version ;
 - pour un index électrique en plusieurs tarifs, l'index total n'est construit
   que si tous les index de l'option sont lus ; un index tarifaire qui revient
   à 0 ou qui baisse seul est une erreur de lecture : pas d'index cette
@@ -121,6 +138,11 @@ d'être facturé :
 - Si le fichier d'état dans `/data` ne peut pas être lu (ou écrit), aucun
   index n'est envoyé tant qu'il ne l'est pas (une valeur retenue peut s'y
   trouver) ; la puissance continue. Un fichier illisible n'est pas écrasé.
+  S'il est abîmé (après une coupure de courant, par exemple), supprimez le
+  fichier `ecodevices-state.json` du volume `/data` de l'intégration (sur
+  l'hôte Docker de Gladys) puis redémarrez l'intégration : elle repart d'un
+  état vide (les index retenus sont oubliés, et les appareils doivent être
+  il faudra peut-être en accepter de nouveau).
 
 ## Limites
 
@@ -132,6 +154,11 @@ d'être facturé :
 - La couleur Tempo du jour et du lendemain n'est pas publiée.
 
 ## Dépannage
+
+Si l'état dit que la réponse ne donne pas certains index (« la réponse ne
+donne pas HCHP », par exemple), envoyez au développeur la réponse de
+`cmd=10` ci-dessous : les noms des index des options heures creuses et EJP
+sont déduits, pas encore confirmés sur un vrai Eco-Devices.
 
 Sur le même réseau que l'Eco-Devices :
 

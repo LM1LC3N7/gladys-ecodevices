@@ -16,9 +16,10 @@ Assistant), ported to JavaScript.
   the Gladys energy monitoring, each tariff index as a plain sensor.
 - Pulse counters set to water or gas: index and consumption of the day, in
   m³ (never in the energy monitoring).
-- Every index checked by a guard: never 0, a jump held until the user
-  accepts it in two clicks, a drop never accepted (the device is created
-  again).
+- Every index checked by a guard: never 0, a jump (or a drop of a water or
+  gas counter) held until the user accepts it in two clicks; a drop of a
+  teleinfo consumption index is never accepted (the device is created again,
+  its history lost: see the docs). The state is tied to the Gladys device.
 - Optional login (HTTP Basic), never logged; a refused login stops the reads
   until it changes or the test button succeeds.
 - Read-only. Not the `gladys-teleinfo` integration (LiXee USB key): one of

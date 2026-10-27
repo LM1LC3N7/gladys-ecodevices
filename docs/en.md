@@ -78,15 +78,30 @@ index (a meter replaced, a read error) is held instead of billed:
 - a jump or a drop is **held**: the last accepted value is sent again, the
   status of the integration shows it, and it is kept in `/data` across
   restarts. Neither time nor repetition confirms it;
-- **a right jump** is taken in **two clicks** on "Accept the held index": the
-  first click lists the jumps and takes nothing; the second, a few seconds to
-  5 minutes later, takes the values listed (plus what the meter may measure
-  meanwhile), only if they did not change otherwise. Saving the configuration
-  accepts nothing;
-- **a drop is never accepted**: if the meter was replaced, or if you set the
-  pulse counter back to a lower value in the Eco-Devices, delete the device
-  of that input and create it again from the Discover tab (its history
-  starts over);
+- **a right jump** (and, for a water or gas counter, **a right drop**, for
+  example after correcting the index entered in the Eco-Devices) is taken in
+  **two clicks** on "Accept the held index": the first click lists the held
+  values and takes nothing; the second, a few seconds to 5 minutes later,
+  takes the values listed (plus what the meter may measure meanwhile), only
+  if they did not change otherwise. Saving the configuration accepts nothing.
+  The badge of the device turns orange while an index is held;
+- changing the **unit** of a pulse counter in the configuration (litres or
+  m³) converts the reference value: neither a jump nor a drop;
+- **a drop of a teleinfo consumption index is never accepted** (it is a sum
+  of indexes: it only drops when it is another meter). It happens when the
+  meter is **replaced**, or when the **tariff option changes** (base to
+  off-peak or Tempo, for example) and the meter starts its new indexes from
+  zero. The status of the integration says so ("Consumption index DROP held,
+  never accepted"). The only way out is to **delete the device** of that
+  input and **create it again** from the Discover tab. What it costs:
+  - the whole history of the device is lost: index, power, and the
+    **consumption and cost** computed by the energy monitoring;
+  - it must be placed again in the energy tree and tied to your contract;
+  - Gladys refuses to delete a device with more than 5000 states (about 21
+    hours of power at one value every 15 seconds): it purges them in the
+    background, try again later.
+    Keeping the history without accepting the drop (a new device created
+    beside the old one) is not possible in this version;
 - for an electricity index with several tariffs, the total is built only
   when every index of the option is read; a tariff index back to 0 or
   dropping alone is a read error: no index that time.
@@ -113,7 +128,10 @@ index (a meter replaced, a read error) is held instead of billed:
   asked again after 5 s, then doubled, up to 5 minutes, without end.
 - If the state file in `/data` cannot be read (or written), no index is sent
   until it can (a held value may be in it); the power goes on. A file that
-  cannot be read is not overwritten.
+  cannot be read is not overwritten. If it is damaged (after a power cut, for
+  example), delete the file `ecodevices-state.json` from the `/data` volume of
+  the integration (on the Docker host of Gladys) and restart the integration:
+  it starts from an empty state (the held indexes are forgotten).
 
 ## Limits
 
@@ -124,6 +142,11 @@ index (a meter replaced, a read error) is held instead of billed:
 - The Tempo colour of today and tomorrow is not published.
 
 ## Troubleshooting
+
+If the status says the answer gives no index of some keys ("the answer gives
+no HCHP", for example), send the developer the `cmd=10` answer below: the
+names of the off-peak and EJP indexes are inferred, not yet confirmed on a
+real Eco-Devices.
 
 On the same network as the Eco-Devices:
 

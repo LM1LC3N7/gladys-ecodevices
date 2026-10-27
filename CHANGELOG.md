@@ -16,5 +16,7 @@ the notes of the version's GitHub Release.
   API (`cmd=10`, `cmd=20`), one device per input. Teleinfo 1 and 2: apparent
   power (VA), consumption index (kWh) for the energy monitoring, tariff
   indexes as plain sensors. Pulse counters 1 and 2 (water or gas): index and
-  consumption of the day in m³. Index guard (never 0, jumps accepted in two
-  clicks, drops never), optional login, test button. Read-only.
+  consumption of the day in m³. Index guard (never 0, jumps and counter drops
+  accepted in two clicks, teleinfo drops never, the state tied to the Gladys
+  device, a unit change converted), orange badge while an index is held,
+  optional login, test button. Read-only.

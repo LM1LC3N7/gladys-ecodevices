@@ -77,23 +77,28 @@ const nextRead = (next) =>
     ? { en: '', fr: '' }
     : { en: ` Next read in ${delay(next).en}.`, fr: ` Prochaine lecture dans ${delay(next).fr}.` };
 
-/** A held value in words. */
+/** A held value in words; only an electricity jump says what it would bill. */
 const heldText = (lang, { input, direction, from, to, unit }) => {
   const name = INPUT[input][lang];
+  const counted = unit === 'kWh';
   if (lang === 'en') {
     return direction === 'down'
       ? `${name} dropped from ${num(from)} to ${num(to)} ${unit}`
-      : `${name} jumped from ${num(from)} to ${num(to)} ${unit} (${num(to - from)} ${unit} would be counted at once)`;
+      : `${name} jumped from ${num(from)} to ${num(to)} ${unit}${counted ? ` (${num(to - from)} kWh would be counted at once as consumption)` : ''}`;
   }
   return direction === 'down'
     ? `${name} a baissé de ${num(from)} à ${num(to)} ${unit}`
-    : `${name} a sauté de ${num(from)} à ${num(to)} ${unit} (${num(to - from)} ${unit} seraient comptés d’un coup)`;
+    : `${name} a sauté de ${num(from)} à ${num(to)} ${unit}${counted ? ` (${num(to - from)} kWh seraient comptés d’un coup comme consommation)` : ''}`;
 };
 
+/** A drop of a teleinfo total: never accepted; why, and what the way out costs. */
 const DROP_HELP = {
-  en: 'A drop is never accepted: if the meter was replaced or the counter set back, delete the device of that input and create it again from the "Discover" tab (its history starts over).',
-  fr: 'Une baisse n’est jamais acceptée : si le compteur a été remplacé ou le compteur d’impulsions remis à une valeur plus basse, supprimez l’appareil de cette entrée et recréez-le depuis l’onglet « Découverte » (son historique repart de zéro).',
+  en: 'A drop of a teleinfo consumption index is never accepted: it comes from another meter on the input (a meter replaced) or a change of tariff option that started its indexes again. The only way out is to delete the device of that input and create it again from the "Discover" tab: its history (index, power, consumption and cost of the energy monitoring) is lost and it must be placed again in the energy tree; Gladys may refuse to delete a device with more than 5000 states (it purges them in the background: try again later).',
+  fr: 'Une baisse de l’index de consommation d’une entrée téléinfo n’est jamais acceptée : elle vient d’un autre compteur sur l’entrée (compteur remplacé) ou d’un changement d’option tarifaire qui a remis ses index à zéro. La seule sortie est de supprimer l’appareil de cette entrée puis de le recréer depuis l’onglet « Découverte » : son historique (index, puissance, consommation et coût du suivi énergétique) est perdu et il faut le replacer dans l’arbre énergie ; Gladys peut refuser de supprimer un appareil de plus de 5000 états (il les purge en arrière-plan : réessayez plus tard).',
 };
+
+/** Whether a held value is a teleinfo drop (never accepted). */
+const isFinalDrop = (h) => h.direction === 'down' && h.unit === 'kWh';
 
 export const T = {
   incomplete: {
@@ -104,6 +109,21 @@ export const T = {
     en: 'The Eco-Devices address is not valid: enter an IP address or a host name, with an optional port (e.g. 192.168.1.20).',
     fr: 'L’adresse de l’Eco-Devices n’est pas valide : saisissez une adresse IP ou un nom d’hôte, avec un port éventuel (ex. 192.168.1.20).',
   },
+  credentialsInAddress: {
+    en: 'The Eco-Devices address holds a user name and password ("user:password@"): enter only the IP address here, and the login in the "User name" and "Password" fields.',
+    fr: 'L’adresse de l’Eco-Devices contient un nom d’utilisateur et un mot de passe (« utilisateur:motdepasse@ ») : saisissez ici seulement l’adresse IP, et les identifiants dans les champs « Nom d’utilisateur » et « Mot de passe ».',
+  },
+  /** The badge of a device whose index is held. */
+  badge: (h) =>
+    isFinalDrop(h)
+      ? {
+          en: `Index held: ${heldText('en', h)}, never accepted (see the integration status).`,
+          fr: `Index retenu : ${heldText('fr', h)}, jamais acceptée (voir l’état de l’intégration).`,
+        }
+      : {
+          en: `Index held: ${heldText('en', h)} ("Accept the held index", two clicks).`,
+          fr: `Index retenu : ${heldText('fr', h)} (« Accepter l’index retenu », deux clics).`,
+        },
   badLogin: {
     en: 'The login is incomplete or not valid: fill both the user name (without ":") and the password, or leave both empty.',
     fr: 'Les identifiants sont incomplets ou invalides : remplissez le nom d’utilisateur (sans « : ») et le mot de passe, ou laissez les deux vides.',
@@ -176,6 +196,11 @@ export const T = {
       en: `${inputs('en', items)}: indexes of two tariff options at once, no consumption index (power only).`,
       fr: `${inputs('fr', items)} : des index de deux options tarifaires à la fois, pas d’index de consommation (puissance seulement).`,
     }),
+    /** `items`: `[{ input, keys }]`, the keys of its option the answer does not give. */
+    incomplete: (items) => ({
+      en: `${items.map((i) => `${INPUT[i.input].en}: the answer gives no ${i.keys.join(', ')}`).join('; ')}, so no consumption index (power only). Please send the answer of http://<address>/api/xdevices.json?cmd=10 to the developer of the integration.`,
+      fr: `${items.map((i) => `${INPUT[i.input].fr} : la réponse ne donne pas ${i.keys.join(', ')}`).join(' ; ')}, donc pas d’index de consommation (puissance seulement). Merci d’envoyer la réponse de http://<adresse>/api/xdevices.json?cmd=10 au développeur de l’intégration.`,
+    }),
     noIndex: (items) => ({
       en: `${inputs('en', items)}: no complete tariff index this time (a missing or glitching index), no consumption index sent.`,
       fr: `${inputs('fr', items)} : pas d’index tarifaire complet cette fois (un index absent ou incohérent), aucun index de consommation envoyé.`,
@@ -206,28 +231,27 @@ export const T = {
     },
     /** Every index held, `{ input, direction, from, to, unit }`. */
     held: (held) => {
-      const jumps = held.some((h) => h.direction === 'up');
-      const drops = held.some((h) => h.direction === 'down');
-      return {
-        en: [
-          `Index held back (the last accepted value is sent again): ${held.map((h) => heldText('en', h)).join('; ')}.`,
-          jumps
-            ? 'If a jump is right, click "Accept the held index" twice in the configuration of the integration (the first click lists, the second accepts what was listed). Saving the configuration accepts nothing.'
-            : '',
-          drops ? DROP_HELP.en : '',
-        ]
-          .filter(Boolean)
-          .join(' '),
-        fr: [
-          `Index retenu (la dernière valeur acceptée est renvoyée) : ${held.map((h) => heldText('fr', h)).join(' ; ')}.`,
-          jumps
-            ? 'Si un saut est juste, cliquez deux fois sur « Accepter l’index retenu » dans la configuration de l’intégration (le premier clic liste, le second accepte ce qui a été listé). Enregistrer la configuration n’accepte rien.'
-            : '',
-          drops ? DROP_HELP.fr : '',
-        ]
-          .filter(Boolean)
-          .join(' '),
-      };
+      const final = held.filter(isFinalDrop);
+      const open = held.filter((h) => !isFinalDrop(h));
+      const en = [];
+      const fr = [];
+      if (final.length > 0) {
+        en.push(
+          `Consumption index DROP held, never accepted (the last accepted value is sent again): ${final.map((h) => heldText('en', h)).join('; ')}. ${DROP_HELP.en}`,
+        );
+        fr.push(
+          `BAISSE d’index de consommation retenue, jamais acceptée (la dernière valeur acceptée est renvoyée) : ${final.map((h) => heldText('fr', h)).join(' ; ')}. ${DROP_HELP.fr}`,
+        );
+      }
+      if (open.length > 0) {
+        en.push(
+          `Index held back (the last accepted value is sent again): ${open.map((h) => heldText('en', h)).join('; ')}. If it is right, click "Accept the held index" twice in the configuration of the integration (the first click lists, the second accepts what was listed). Saving the configuration accepts nothing.`,
+        );
+        fr.push(
+          `Index retenu (la dernière valeur acceptée est renvoyée) : ${open.map((h) => heldText('fr', h)).join(' ; ')}. Si c’est juste, cliquez deux fois sur « Accepter l’index retenu » dans la configuration de l’intégration (le premier clic liste, le second accepte ce qui a été listé). Enregistrer la configuration n’accepte rien.`,
+        );
+      }
+      return { en: en.join(' '), fr: fr.join(' ') };
     },
   },
   accept: {
@@ -236,13 +260,13 @@ export const T = {
       fr: 'Aucun index n’est retenu : rien à accepter.',
     },
     dropsOnly: (drops) => ({
-      en: `Only drops are held (${drops.map((h) => heldText('en', h)).join('; ')}): nothing to accept. ${DROP_HELP.en}`,
-      fr: `Seules des baisses sont retenues (${drops.map((h) => heldText('fr', h)).join(' ; ')}) : rien à accepter. ${DROP_HELP.fr}`,
+      en: `Only teleinfo drops are held (${drops.map((h) => heldText('en', h)).join('; ')}): nothing to accept. ${DROP_HELP.en}`,
+      fr: `Seules des baisses téléinfo sont retenues (${drops.map((h) => heldText('fr', h)).join(' ; ')}) : rien à accepter. ${DROP_HELP.fr}`,
     }),
     /** The first click: what a second click would accept. */
     confirm: (jumps, drops, within) => ({
-      en: `A second click accepts these jumps, plus what each meter may measure between the two clicks: ${jumps.map((h) => heldText('en', h)).join('; ')}. Click "Accept the held index" again, after a few seconds and within ${delay(within).en}; accept only if this consumption was real.${drops.length > 0 ? ` ${DROP_HELP.en}` : ''}`,
-      fr: `Un second clic accepte ces sauts, plus ce que chaque compteur a pu mesurer entre les deux clics : ${jumps.map((h) => heldText('fr', h)).join(' ; ')}. Cliquez de nouveau sur « Accepter l’index retenu », après quelques secondes et dans les ${delay(within).fr} ; n’acceptez que si cette consommation est réelle.${drops.length > 0 ? ` ${DROP_HELP.fr}` : ''}`,
+      en: `A second click accepts these values, plus what each meter may measure between the two clicks: ${jumps.map((h) => heldText('en', h)).join('; ')}. Click "Accept the held index" again, after a few seconds and within ${delay(within).en}; accept only if they are right.${drops.length > 0 ? ` ${DROP_HELP.en}` : ''}`,
+      fr: `Un second clic accepte ces valeurs, plus ce que chaque compteur a pu mesurer entre les deux clics : ${jumps.map((h) => heldText('fr', h)).join(' ; ')}. Cliquez de nouveau sur « Accepter l’index retenu », après quelques secondes et dans les ${delay(within).fr} ; n’acceptez que si elles sont justes.${drops.length > 0 ? ` ${DROP_HELP.fr}` : ''}`,
     }),
     /** The second click: what was taken, what changed since the first. */
     done: (accepted, changed, drops) => {

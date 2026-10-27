@@ -68,10 +68,14 @@ test/                             node --test, against the SDK's fake Gladys, a 
   tariff option, built only when each of them is read (a tariff back to 0 or
   lower alone is a glitch: no total). It passes `IndexGuard` (`src/guard.js`,
   100 kW, 0.5 kWh), one guard per input: never 0, a drop and a jump never
-  confirmed by repetition nor by time. A jump is taken only by the
+  confirmed by repetition nor by time. A jump (and a drop of a pulse
+  counter, which is no built index) is taken only by the
   `accept_held_index` action in two clicks (the first lists, the second
-  takes only what was listed and has not changed since); a drop is never
-  accepted (the device is created again). The tariff indexes are plain
+  takes only what was listed and has not changed since); a drop of a
+  teleinfo total is never accepted (the device is created again). The index
+  state in `/data` carries the id of its Gladys device (another id: an empty
+  reference) and, for a counter, its unit (a change converts the reference);
+  `onDeviceCreated` / `onDeviceDeleted` clear it. The tariff indexes are plain
   sensors, published with the total they make. Pulse counters (water 10
   m³/h, gas 16 m³/h) are `volume-sensor` m³ with the same guard, never in the
   energy monitoring. Never `publishEnergyConsumption`. Do not change

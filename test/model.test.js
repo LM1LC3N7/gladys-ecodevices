@@ -17,6 +17,7 @@ test('the example of the GCE wiki (cmd=10): T1 in base, T2 unused, both counters
     pappInvalid: false,
     option: 'base',
     tariffs: { BASE: 50_670_371 },
+    missing: [],
     ambiguous: false,
   });
   assert.equal(r.teleinfo.t2.connected, false, '"----" and zeros: no meter');

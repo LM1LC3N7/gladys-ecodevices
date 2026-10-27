@@ -68,7 +68,10 @@ function periodOf(value) {
  */
 function teleinfoOf(json, n) {
   const key = (name) => `T${n}_${name}`;
-  const period = periodOf(own(json, key('PTEC')));
+  const rawPeriod = own(json, key('PTEC'));
+  const period = periodOf(rawPeriod);
+  // "----": no meter on the input (cable out): its power is unknown, never 0 VA.
+  const noMeter = typeof rawPeriod === 'string' && /^\s*-+\s*$/.test(rawPeriod);
   const rawPapp = own(json, key('PAPP'));
   const papp = integer(rawPapp, PAPP_MAX);
   const active = [];
@@ -88,10 +91,16 @@ function teleinfoOf(json, n) {
     connected,
     period,
     // A power out of bounds or not a number is unknown; 0 on an unused input says nothing.
-    papp: connected ? papp : undefined,
+    papp: connected && !noMeter ? papp : undefined,
     pappInvalid: connected && rawPapp !== undefined && papp === undefined,
     option: chosen?.option,
     tariffs: chosen?.tariffs,
+    // The keys of the option that the answer does not give (or not as a number).
+    missing: chosen
+      ? Object.entries(chosen.tariffs)
+          .filter(([, value]) => value === undefined)
+          .map(([name]) => name)
+      : [],
     ambiguous,
   };
 }

@@ -71,12 +71,26 @@
 - **Index guard**: electricity 100 kW + 0.5 kWh, water 10 m³/h + 0.05 m³, gas
   16 m³/h + 0.05 m³. Jumps accepted in two clicks (3 s to 5 min, same
   session, same `from` and threshold, `to` within the margin since the
-  listing: the mechanism of gladys-iskra). **A drop is never accepted** (the
-  rule of the lot for built indexes and lifetime counters): the way out of a
-  replaced meter or a counter set back is to delete and create the device
-  again (a created device clears its guard), said in the status, the accept
-  answer and the docs. The tariff indexes are published only with the total
-  they make (accepted, or the last accepted while one is held), never 0.
+  listing: the mechanism of gladys-iskra). Review r1:
+  - **pulse counters** are no built index: their drop is accepted in two
+    clicks too (same `from`, `to` within the margin of the listed value); a
+    change of the unit in the configuration converts the kept reference
+    (and a held value), dated now, the old-unit value of Gladys ignored;
+  - **a drop of a teleinfo total is never accepted** (rule of the fiche
+    "baisse d'index construit jamais acceptée", kept by decision of the lot,
+    review I3): it comes from a replaced meter or a change of tariff option
+    that restarts the registers. The status says it plainly ("DROP held,
+    never accepted"), the device badge is degraded (orange), the docs list
+    the triggers and the cost of the only way out (delete and create the
+    device: index, power, consumption and cost lost, the energy tree to set
+    again, Gladys refusing a deletion beyond 5000 states). A way out that
+    keeps the history (a new device beside the old) is not possible in this
+    version: the external ids are one per input (see Ideas);
+  - the index state in `/data` carries the id of its Gladys device: a device
+    created again while the integration was away (no `device-created`
+    event) starts from an empty reference; `onDeviceDeleted` clears it;
+  - one log line per hold (direction and starting value), not per minute. The tariff indexes are published only with the total
+    they make (accepted, or the last accepted while one is held), never 0.
 - **Pulse counters**: off by default; water or gas (`volume-sensor`, m³);
   unit of the Eco-Devices index liter (default, divided by 1000) or m³.
   Electricity pulses are not offered (they would be a second energy index:
@@ -124,6 +138,9 @@
 
 ## Ideas
 
+- A way out of a teleinfo drop that keeps the history: a generation in the
+  external id (`ecodevices:t1`, then `ecodevices:t1-2` offered beside the old
+  device, the old one kept read-only), chosen by a two-click action.
 - The Tempo colour of today and tomorrow (`PTEC`, `DEMAIN`) as an enum, an
   off-peak binary sensor.
 - Electricity pulses on C1/C2 as a second energy index (guarded).

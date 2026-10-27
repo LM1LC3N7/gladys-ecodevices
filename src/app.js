@@ -184,6 +184,17 @@ function validFingerprint(fp, now, mono) {
   return { fp: fp.fp, at, mono: mono - (now - at) };
 }
 
+/** What ties a kept index state to ONE Gladys device: its id (a device created again is another). */
+const deviceKeyOf = (device) =>
+  typeof device?.id === 'string' && device.id !== ''
+    ? device.id
+    : typeof device?.created_at === 'string'
+      ? device.created_at
+      : undefined;
+
+/** m³ per unit of the Eco-Devices index. */
+const M3_PER = { liter: 0.001, cubic_meter: 1 };
+
 /** The limits of the guard of an input (units per hour), from what it measures. */
 function limitsOf(input, counters) {
   if (TELEINFO_INPUTS.includes(input)) return ELECTRICITY_LIMITS;
@@ -230,6 +241,13 @@ export class EcoDevicesApp {
     this.configRun = Promise.resolve();
     /** By input: the guard of its index. */
     this.guards = new Map();
+    /** By input: `{ device, unit }` the guard belongs to (kept with its state in /data). */
+    this.guardMeta = new Map();
+    /** By input: the hold already logged (one line per hold, not per minute). */
+    this.heldLogged = new Map();
+    /** Teleinfo inputs whose answer lacks keys of its option, already logged. */
+    this.missingLogged = new Set();
+    this.lastBadges = undefined;
     this.guardsKey = undefined;
     this.pause = undefined;
     this.refused = undefined;
@@ -278,6 +296,7 @@ export class EcoDevicesApp {
     }
     this.indexes = indexes;
     this.guards.clear();
+    this.guardMeta.clear();
     this.tariffRefs.clear();
     for (const input of TELEINFO_INPUTS) {
       const ref = validTariffRef(indexes[input]?.tariffs);
@@ -470,6 +489,7 @@ export class EcoDevicesApp {
     // values in memory: a restarted Gladys has lost them, so they are always
     // sent again (the values at the next read, never a value of before).
     this.lastStatus = undefined;
+    this.lastBadges = undefined;
     this.lastIndexAt = undefined;
     this.daily.fresh = false;
     this.gladys.forgetPublishedStates?.();
@@ -601,9 +621,35 @@ export class EcoDevicesApp {
       return;
     }
     if (gone()) return;
+    // The indexes and the power first: a slow page of the day never delays them.
+    this.daily.fresh = false;
+    await this.succeeded(reading, mono, gone);
+    if (gone()) return;
     await this.readDaily(client, gone, mono);
     if (gone()) return;
-    await this.succeeded(reading, mono, gone);
+    if (this.daily.fresh) {
+      await this.publishToday();
+      if (gone()) return;
+    }
+    await this.updateStatus();
+  }
+
+  /** The consumption of the day of the counters set, from the page just read. */
+  async publishToday() {
+    const states = [];
+    for (const input of COUNTER_INPUTS) {
+      const created = this.createdDevice(input);
+      const { type, unit } = this.config.counters[input];
+      if (!created || type === 'none') continue;
+      const external = ids(this.gladys, input);
+      states.push(
+        ...this.only(created, todayStates(external, toCubicMeters(this.daily.data?.[input], unit))),
+      );
+    }
+    if (states.length === 0) return;
+    await this.gladys
+      .publishChangedStates(states, { heartbeat: STATE_HEARTBEAT })
+      .catch((err) => this.logger.warn(`Publishing the Eco-Devices values failed (${err?.name})`));
   }
 
   /** Whether a pulse counter is set (water or gas): only then is the page of the day read. */
@@ -698,11 +744,62 @@ export class EcoDevicesApp {
       await this.discover();
       if (gone()) return;
     }
+    for (const input of TELEINFO_INPUTS) {
+      const missing = reading.teleinfo[input].missing ?? [];
+      if (missing.length > 0 && !this.missingLogged.has(input)) {
+        this.missingLogged.add(input);
+        // The names of the keys only (never a value): what to ask the user for.
+        this.logger.warn(
+          `ecodevices ${input}: the answer gives no ${missing.join(', ')} for its tariff option`,
+        );
+      } else if (missing.length === 0) {
+        this.missingLogged.delete(input);
+      }
+    }
     await this.publish(reading, mono, frozen, gone);
     if (gone()) return;
     await this.saveState();
     if (gone()) return;
     await this.updateStatus();
+    if (gone()) return;
+    await this.publishBadges();
+  }
+
+  /** One log line per hold (its direction and starting value), never one per minute. */
+  logHold(input, guard) {
+    const held = guard.held;
+    const key = held ? `${held.direction}:${held.from}` : undefined;
+    if (key && this.heldLogged.get(input) !== key) {
+      this.logger.warn(
+        `ecodevices ${input} index ${held.direction === 'down' ? 'drop' : 'jump'} held back`,
+      );
+    }
+    if (key) this.heldLogged.set(input, key);
+    else this.heldLogged.delete(input);
+  }
+
+  /**
+   * The badge of each created device: degraded (orange) while its index is
+   * held, with why; local otherwise. Sent when it changes, and at each start.
+   */
+  async publishBadges() {
+    const held = new Map(this.heldList().map((h) => [h.input, h]));
+    const badges = [];
+    for (const input of INPUTS) {
+      if (!this.createdDevice(input)) continue;
+      const h = held.get(input);
+      badges.push({
+        external_id: ids(this.gladys, input).device,
+        transport: 'local',
+        ...(h ? { degraded: true, message: T.badge(h) } : {}),
+      });
+    }
+    const key = JSON.stringify(badges);
+    if (badges.length === 0 || key === this.lastBadges) return;
+    this.lastBadges = key;
+    await this.gladys
+      .publishTransports(badges)
+      .catch((err) => this.logger.warn(`Publishing the device badges failed (${err?.name})`));
   }
 
   /**
@@ -808,6 +905,7 @@ export class EcoDevicesApp {
   currentStatus() {
     const address = this.config.address;
     if (!this.session?.client) {
+      if (this.config.credentialsInAddress) return [false, T.credentialsInAddress];
       if (this.config.invalidAddress) return [false, T.badAddress];
       if (this.config.invalidLogin) return [false, T.badLogin];
       return [false, T.incomplete];
@@ -836,9 +934,21 @@ export class EcoDevicesApp {
       if (missing.length > 0) extra.push(T.notes.noDevice(missing));
       const ambiguous = TELEINFO_INPUTS.filter((i) => reading.teleinfo[i].ambiguous);
       if (ambiguous.length > 0) extra.push(T.notes.ambiguous(ambiguous));
+      // A key of the option missing from the answer (every time): its own note,
+      // with the key names; a glitch of one read: "this time".
+      const incomplete = connected.filter((i) => (reading.teleinfo[i].missing ?? []).length > 0);
+      if (incomplete.length > 0) {
+        extra.push(
+          T.notes.incomplete(
+            incomplete.map((i) => ({ input: i, keys: reading.teleinfo[i].missing })),
+          ),
+        );
+      }
       const noIndex = connected.filter(
         (i) =>
-          !reading.teleinfo[i].ambiguous && (!reading.teleinfo[i].tariffs || this.noTotal.has(i)),
+          !reading.teleinfo[i].ambiguous &&
+          !incomplete.includes(i) &&
+          (!reading.teleinfo[i].tariffs || this.noTotal.has(i)),
       );
       if (noIndex.length > 0) extra.push(T.notes.noIndex(noIndex));
       if (frozen.length > 0) extra.push(T.notes.frozen(frozen, FROZEN_AFTER));
@@ -879,7 +989,13 @@ export class EcoDevicesApp {
   syncIndexes() {
     for (const [input, guard] of this.guards) {
       const ref = this.tariffRefs.get(input);
-      this.indexes[input] = { ...guard.state(), ...(ref ? { tariffs: ref } : {}) };
+      const meta = this.guardMeta.get(input) ?? {};
+      this.indexes[input] = {
+        ...guard.state(),
+        ...(ref ? { tariffs: ref } : {}),
+        ...(meta.device !== undefined ? { device: meta.device } : {}),
+        ...(meta.unit !== undefined ? { unit: meta.unit } : {}),
+      };
     }
   }
 
@@ -967,18 +1083,35 @@ export class EcoDevicesApp {
 
   async onDeviceCreated(device) {
     // A new device has no reference of its index yet (nor a state kept for a
-    // deleted device of the same input): nothing can be counted twice.
-    const input = inputOfExternal(this.gladys, device?.external_id);
+    // deleted device of the same input): nothing can be counted twice. A
+    // device created while the integration was away is caught too: the state
+    // kept carries the id of its device (currentGuard).
+    await this.clearInput(inputOfExternal(this.gladys, device?.external_id));
+  }
+
+  /** A device deleted: the index state of its input goes with it. */
+  async onDeviceDeleted(device) {
+    await this.clearInput(inputOfExternal(this.gladys, device?.external_id));
+  }
+
+  async clearInput(input) {
     if (!input) {
       return;
     }
-    this.guards.delete(input);
-    this.tariffRefs.delete(input);
-    delete this.indexes[input];
+    this.forgetIndex(input);
     this.pendingAccept = undefined;
     await this.saveState();
     this.lastIndexAt = undefined;
     await this.updateStatus();
+  }
+
+  /** The index state of an input, in memory (saved by the caller). */
+  forgetIndex(input) {
+    this.guards.delete(input);
+    this.guardMeta.delete(input);
+    this.tariffRefs.delete(input);
+    this.heldLogged.delete(input);
+    delete this.indexes[input];
   }
 
   async onDeviceUpdated(device) {
@@ -1003,18 +1136,55 @@ export class EcoDevicesApp {
     if (!created || this.storeError) {
       return this.guards.get(input);
     }
+    const meta = this.guardMeta.get(input);
+    if (meta && meta.device !== deviceKeyOf(created)) {
+      // Another device of this input (created again while the app was away).
+      this.forgetIndex(input);
+    }
     if (!this.guards.has(input)) {
+      const device = deviceKeyOf(created);
+      let saved = this.indexes[input];
+      if (saved?.device !== undefined && device !== undefined && saved.device !== device) {
+        // Kept for another device of this input (deleted, created again while
+        // the integration was away): never the reference of the new one.
+        this.forgetIndex(input);
+        saved = undefined;
+      }
+      const counter = COUNTER_INPUTS.includes(input);
+      const unit = counter ? this.config.counters[input].unit : undefined;
+      let known = lastValueOf(created, this.indexFeatureId(input));
+      if (counter && saved && M3_PER[saved.unit] && saved.unit !== unit) {
+        // The unit of the Eco-Devices index was corrected: the reference (and
+        // a value held) follow it, dated now; the value Gladys holds is in
+        // the old unit, it is not taken.
+        saved = this.convertedState(saved, M3_PER[unit] / M3_PER[saved.unit]);
+        known = undefined;
+      }
       this.guards.set(
         input,
-        new IndexGuard(
-          lastValueOf(created, this.indexFeatureId(input)),
-          this.indexes[input],
-          this.now(),
-          limitsOf(input, this.config.counters),
-        ),
+        new IndexGuard(known, saved, this.now(), limitsOf(input, this.config.counters)),
       );
+      this.guardMeta.set(input, { device, unit });
     }
     return this.guards.get(input);
+  }
+
+  /** A kept index state with every value turned to the new unit (`factor`: new per old). */
+  convertedState(saved, factor) {
+    const at = this.now();
+    const value = (v) => round(v * factor, 3);
+    const out = {};
+    if (finite(saved.last?.value)) out.last = { value: value(saved.last.value), at };
+    if (saved.held && ['from', 'to', 'threshold'].every((k) => finite(saved.held[k]))) {
+      out.held = {
+        ...saved.held,
+        from: value(saved.held.from),
+        to: value(saved.held.to),
+        threshold: value(saved.held.threshold),
+        at,
+      };
+    }
+    return out;
   }
 
   /**
@@ -1046,11 +1216,8 @@ export class EcoDevicesApp {
       const plausible = kwh !== undefined && guard.accept(kwh, now);
       if (plausible) {
         this.tariffRefs.set(input, { option: t.option, tariffs: { ...t.tariffs } });
-      } else if (kwh !== undefined && guard.held) {
-        this.logger.warn(
-          `ecodevices ${input} index ${guard.held.direction === 'down' ? 'drop' : 'jump'} held back`,
-        );
       }
+      this.logHold(input, guard);
       // While a value is held, the last accepted one (and its tariffs) is sent again.
       const ref = this.tariffRefs.get(input);
       const total = plausible ? kwh : guard.held ? guard.last?.value : undefined;
@@ -1062,18 +1229,11 @@ export class EcoDevicesApp {
       const { type, unit } = this.config.counters[input];
       if (!created || type === 'none') continue;
       const external = ids(this.gladys, input);
-      if (this.daily.fresh) {
-        live.push(...todayStates(external, toCubicMeters(this.daily.data?.[input], unit)));
-      }
       if (!indexDue || this.storeError) continue;
       const guard = this.currentGuard(input);
       const m3 = toCubicMeters(reading.counters[input], unit);
       const plausible = m3 !== undefined && m3 > 0 && guard.accept(m3, now);
-      if (m3 !== undefined && !plausible && guard.held) {
-        this.logger.warn(
-          `ecodevices ${input} index ${guard.held.direction === 'down' ? 'drop' : 'jump'} held back`,
-        );
-      }
+      this.logHold(input, guard);
       const value = plausible ? m3 : guard.held ? guard.last?.value : undefined;
       indexes.push(...this.only(created, counterIndexStates(external, value)));
     }
@@ -1132,8 +1292,10 @@ export class EcoDevicesApp {
     const pending = this.pendingAccept;
     this.pendingAccept = undefined;
     const elapsed = pending ? mono - pending.at : undefined;
-    const jumps = list.filter((h) => h.direction === 'up');
-    const drops = list.filter((h) => h.direction === 'down');
+    // A drop of a teleinfo total (a built index) is never accepted; a pulse
+    // counter is no built index: its drop is accepted like a jump.
+    const drops = list.filter((h) => h.direction === 'down' && TELEINFO_INPUTS.includes(h.input));
+    const jumps = list.filter((h) => !drops.includes(h));
     if (
       !pending ||
       pending.session !== this.session ||
@@ -1154,14 +1316,18 @@ export class EcoDevicesApp {
       const margin = guard ? guard.margin(pending.listedAt, now) : 0;
       const same =
         held &&
-        held.direction === 'up' &&
+        held.direction === entry.direction &&
         held.from === entry.from &&
-        held.threshold === entry.threshold &&
-        held.to >= entry.to &&
-        held.to - entry.to <= margin;
+        (entry.direction === 'up'
+          ? held.threshold === entry.threshold &&
+            held.to >= entry.to &&
+            held.to - entry.to <= margin
+          : Math.abs(held.to - entry.to) <= margin);
       if (same && guard.acceptHeld()) {
         accepted.push({ ...entry, to: held.to });
-        this.logger.info(`ecodevices ${entry.input} index jump accepted by the user`);
+        this.logger.info(
+          `ecodevices ${entry.input} index ${entry.direction === 'down' ? 'drop' : 'jump'} accepted by the user`,
+        );
       } else if (held) {
         changed.push(entry);
       }

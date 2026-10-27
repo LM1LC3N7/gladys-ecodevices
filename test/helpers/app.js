@@ -32,10 +32,12 @@ export const WATER_GAS = {
  * The device of an input as the user created it (every feature of its
  * kind, or `keys`), the index Gladys holds when given (`{ value, at }`).
  */
-export function created(input = 't1', { keys, index, kind } = {}) {
+export function created(input = 't1', { keys, index, kind, id = `device-${input}-1` } = {}) {
   const gladys = createFakeGladys({ selector: SELECTOR });
   const all = input.startsWith('t') ? TELEINFO_ORDER : COUNTER_ORDER;
   const device = buildDevice(gladys, input, new Set(keys ?? all), { address: ADDRESS, kind });
+  // The id Gladys gives a created device: another one when it is created again.
+  device.id = id;
   if (index) {
     const key = input.startsWith('t') ? 'consumption_index' : 'index';
     const feature = device.features.find((f) => f.external_id === F(input, key));
