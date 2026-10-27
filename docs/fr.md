@@ -141,8 +141,8 @@ d'être facturé :
   S'il est abîmé (après une coupure de courant, par exemple), supprimez le
   fichier `ecodevices-state.json` du volume `/data` de l'intégration (sur
   l'hôte Docker de Gladys) puis redémarrez l'intégration : elle repart d'un
-  état vide (les index retenus sont oubliés, et les appareils doivent être
-  il faudra peut-être en accepter de nouveau).
+  état vide (les index retenus sont oubliés, et il faudra peut-être en
+  accepter de nouveau).
 
 ## Limites
 

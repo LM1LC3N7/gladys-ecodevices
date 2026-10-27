@@ -118,7 +118,7 @@ export const T = {
     isFinalDrop(h)
       ? {
           en: `Index held: ${heldText('en', h)}, never accepted (see the integration status).`,
-          fr: `Index retenu : ${heldText('fr', h)}, jamais acceptée (voir l’état de l’intégration).`,
+          fr: `Index retenu : ${heldText('fr', h)}, baisse jamais acceptée (voir l’état de l’intégration).`,
         }
       : {
           en: `Index held: ${heldText('en', h)} ("Accept the held index", two clicks).`,

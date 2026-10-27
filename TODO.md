@@ -2,6 +2,12 @@
 
 ## Before announcing
 
+- [x] Review r2 (2026-10-27): APPROUVÉ, no blocker.
+- [ ] Next patch — review r2 leftovers: when no tariff option key is
+      recognised, the old "this time" note stays; "neither jump nor drop" is
+      only true while the raw index does not change; tests for the
+      `onDeviceDeleted` wiring in `index.js` and for `today` published without
+      a fresh day page.
 - [ ] Test on a real Gladys with a real Eco-Devices (teleinfo in base, in
       off-peak/peak and in Tempo; a water and a gas meter): test button,
       device creation, the consumption and cost the core derives from the
