@@ -171,6 +171,33 @@ test('a jump is held; two clicks take it, bounded to what the first listed', asy
   assert.doesNotMatch(text(gladys), /held back/);
 });
 
+test('a jump accepted, then the index back near the reference: held as a jump, two clicks take it', async () => {
+  const { box, dev } = scripted();
+  const { app, gladys, start, wait, store } = await setup({ dev, devices: [created('t1')] });
+  await start();
+  box.body = indexes({ base: 60_670_371 });
+  await wait(MINUTE);
+  await app.acceptHeldIndex();
+  await wait(5 * SECOND);
+  const done = await app.acceptHeldIndex();
+  assert.match(done.en, /Accepted: teleinfo 1, index 60670.371 kWh/);
+  // Back before the next read, just above the reference: never a drop, never published.
+  box.body = indexes({ base: 50_670_500 });
+  await wait(MINUTE);
+  assert.equal(last(gladys, F('t1', 'consumption_index')), 50_670.371);
+  assert.equal(store.data.indexes.t1.held.direction, 'up');
+  assert.match(text(gladys), /jumped from 50670.371 to 50670.5 kWh/);
+  assert.doesNotMatch(text(gladys), /DROP/);
+  const first = await app.acceptHeldIndex();
+  assert.match(first.en, /A second click accepts these values/);
+  await wait(5 * SECOND);
+  const again = await app.acceptHeldIndex();
+  assert.match(again.en, /Accepted: teleinfo 1, index 50670.5 kWh/);
+  await wait(MINUTE);
+  assert.equal(last(gladys, F('t1', 'consumption_index')), 50_670.5);
+  assert.doesNotMatch(text(gladys), /held back/);
+});
+
 test('a jump that grows beyond the margin after the first click is not taken', async () => {
   const { box, dev } = scripted();
   const { app, gladys, start, wait } = await setup({ dev, devices: [created('t1')] });
