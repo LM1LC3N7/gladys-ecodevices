@@ -1,6 +1,6 @@
 {
   "name": "gladys-ecodevices",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "GCE Electronics Eco-Devices for Gladys Assistant: its two teleinformation inputs (power and guarded electricity index for the energy monitoring) and its two pulse counters (water, gas), read through the local JSON API. Read-only.",
   "type": "module",
