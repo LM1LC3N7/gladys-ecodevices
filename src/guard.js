@@ -1,10 +1,14 @@
 // -----------------------------------------------------------------------------
 // Plausibility of an energy index, the values Gladys counts. Pure.
 //
-// Taken as it is from gladys-p1-monitor (src/guard.js, approved), with one
-// change only: `maxKw` and `slackKwh` are parameters of the guard (each index
-// passes its own), no longer constants of the module. Same file as
-// gladys-zeversolar's and gladys-imeon's (approved): never changed alone.
+// Taken from gladys-p1-monitor (src/guard.js, approved), with changes: `maxKw`
+// and `slackKwh` are parameters of the guard (each index passes its own), no
+// longer constants of the module; and the held value carries a `direction` and
+// a `threshold` (the lowest value of a jump held), so that a teleinfo index
+// never has an accepted drop and a jump held back under an accepted one is
+// told from a drop. So this file DIVERGES from the shared model of
+// gladys-zeversolar and gladys-imeon (approved): do not copy it back there,
+// nor overwrite it with theirs.
 //
 // The core turns the deltas of an `energy-sensor` / `index` feature (and of an
 // `energy-production-sensor` / `index`) into consumption, cost or production:
@@ -152,7 +156,14 @@ export class IndexGuard {
         // direction is the one from the reference: above it (back under an
         // accepted jump), it is a jump of its own, shown and accepted as one.
         const direction = value > this.last.value ? 'up' : 'down';
-        this.held = { direction, from: this.last.value, to: value, threshold: value, at };
+        // The threshold of a jump held keeps the lowest value seen: an index
+        // that moves every minute must not move it, or the second click of the
+        // user (which requires the same threshold) would be refused.
+        const threshold =
+          direction === 'up' && this.held?.direction === 'up'
+            ? Math.min(value, this.held.threshold)
+            : value;
+        this.held = { direction, from: this.last.value, to: value, threshold, at };
         // Its margin counts from now: a long glitch never widens it.
         this.accepted = { ...this.accepted, at };
         return false;

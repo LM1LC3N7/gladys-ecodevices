@@ -198,6 +198,29 @@ test('a jump accepted, then the index back near the reference: held as a jump, t
   assert.doesNotMatch(text(gladys), /held back/);
 });
 
+test('a jump held back under an accepted jump: the index moving between the two clicks does not refuse the second', async () => {
+  const { box, dev } = scripted();
+  const { app, start, wait } = await setup({ dev, devices: [created('t1')] });
+  await start();
+  box.body = indexes({ base: 60_670_371 });
+  await wait(MINUTE);
+  await app.acceptHeldIndex();
+  await wait(5 * SECOND);
+  await app.acceptHeldIndex();
+  box.body = indexes({ base: 50_670_500 });
+  await wait(MINUTE);
+  const first = await app.acceptHeldIndex();
+  assert.match(first.en, /A second click accepts these values/);
+  // The household draws: the index moves at every minute, still under the accepted jump.
+  box.body = indexes({ base: 50_670_508 });
+  await wait(MINUTE);
+  box.body = indexes({ base: 50_670_516 });
+  await wait(2 * MINUTE);
+  await wait(80 * SECOND);
+  const again = await app.acceptHeldIndex();
+  assert.match(again.en, /Accepted: teleinfo 1, index 50670.516 kWh/);
+});
+
 test('a jump that grows beyond the margin after the first click is not taken', async () => {
   const { box, dev } = scripted();
   const { app, gladys, start, wait } = await setup({ dev, devices: [created('t1')] });

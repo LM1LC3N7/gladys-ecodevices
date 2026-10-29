@@ -54,9 +54,12 @@
   documented by GCE). The teleinformation keys and the totals by option are
   ported from pyecodevices 1.7.0 (MIT) and ecodevices 5.5.0 (Apache-2.0),
   cloned read-only in `~/code/ref/lot17/`. The SDK stays the only runtime
-  dependency. The guard (`src/guard.js`) is the approved shared file of
-  gladys-iskra / gladys-p1-monitor, unchanged (`maxKw` / `slackKwh` are used
-  as "units per hour" for water and gas). The store, the client, the pace,
+  dependency. The guard (`src/guard.js`) comes from the approved shared file of
+  gladys-iskra / gladys-p1-monitor but DIVERGES from it: the held value has
+  `direction` and `threshold` lines, because a teleinfo index never has a
+  drop accepted (a value back under an accepted jump is held as a jump, its
+  threshold the lowest seen). `maxKw` / `slackKwh` are used as "units per
+  hour" for water and gas. The store, the client, the pace,
   the login and the structure of `src/app.js` come from gladys-iskra. The
   template's demo files were removed with `git rm`.
 - **External ids**: `ecodevices:t1`, `t2`, `c1`, `c2`, one device per input,
