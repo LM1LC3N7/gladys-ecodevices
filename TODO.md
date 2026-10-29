@@ -154,3 +154,9 @@
   off-peak binary sensor.
 - Electricity pulses on C1/C2 as a second energy index (guarded).
 - The XML pages for IINST, ISOUSC and the phases (three-phase meters).
+
+## Next patch
+
+- Guard r3 m5: no test pins `this.held?.direction === 'up'` on the threshold line (`src/guard.js:163`). Play
+  1000 → jump accepted at 6000 → 999, 1000.3, 9000, 999.5 and check that 999.5 is held as a drop, never
+  acceptable.
